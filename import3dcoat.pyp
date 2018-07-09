@@ -93,7 +93,12 @@ class import3dCoat(c4d.plugins.CommandData):
                 tag[c4d.REDSHIFT_OBJECT_GEOMETRY_DISPLACEMENTENABLED] = 1
                 tag[c4d.REDSHIFT_OBJECT_GEOMETRY_SUBDIVISIONENABLED] = 0
                 tag[c4d.REDSHIFT_OBJECT_GEOMETRY_SMOOTHSUBDIVISIONENABLED] = 0
-                mat, displValue = self.importMaterialRS(matname, materials[matname], objname)
+                if 'Specular' in materials[matname]:
+                    print('Specular workflow')
+                    mat, displValue = self.importMaterialRS_spec(matname, materials[matname], objname)
+                else:
+                    print('Metalness workflow')
+                    mat, displValue = self.importMaterialRS_metal(matname, materials[matname], objname)
                 if displValue > 1:
                     tag[c4d.REDSHIFT_OBJECT_GEOMETRY_MAXDISPLACEMENT] = displValue
                 else:
@@ -349,7 +354,7 @@ class import3dCoat(c4d.plugins.CommandData):
             displValue = 0
         return mat, displValue
 
-    def importMaterialRS(self, matname, textures, objname):
+    def importMaterialRS_metal(self, matname, textures, objname):
         rs = Redshift()
         mat = rs.CreateMaterial()
         rs.SetMat(mat)
@@ -437,7 +442,100 @@ class import3dCoat(c4d.plugins.CommandData):
             texNodeEmit.SetName('Tex Emission')
             texNodeEmit[c4d.REDSHIFT_SHADER_TEXTURESAMPLER_TEX0, c4d.REDSHIFT_FILE_PATH]=texEmit
         return mat, displValue
-     
+
+    def importMaterialRS_spec(self, matname, textures, objname):
+        rs = Redshift()
+        mat = rs.CreateMaterial()
+        rs.SetMat(mat)
+        mat.SetName(objname + '_' + matname)
+        mat[c4d.ID_LAYER_LINK] = self.layerSet(objname)
+        self.doc.InsertMaterial(mat) 
+        self.doc.AddUndo(c4d.UNDOTYPE_NEW,mat)
+        listNode = rs.GetAllNodes()
+        MatNode = None
+        OutPutNode = None
+        for node in listNode:
+            if node.GetType() == "Output":
+                OutPutNode = node
+            elif node.GetType() == "Material":
+                MatNode = node
+        MatNode[c4d.REDSHIFT_SHADER_MATERIAL_REFL_FRESNEL_MODE] = 1
+        MatNode.ExposeParameter(c4d.REDSHIFT_SHADER_MATERIAL_DIFFUSE_COLOR, c4d.GV_PORT_INPUT)
+        MatNode.ExposeParameter(c4d.REDSHIFT_SHADER_MATERIAL_REFL_ROUGHNESS, c4d.GV_PORT_INPUT)
+        MatNode.ExposeParameter(c4d.REDSHIFT_SHADER_MATERIAL_REFL_REFLECTIVITY, c4d.GV_PORT_INPUT)
+        MatNode.ExposeParameter(c4d.REDSHIFT_SHADER_MATERIAL_BUMP_INPUT, c4d.GV_PORT_INPUT)
+        OutPutNode.ExposeParameter(c4d.GV_REDSHIFT_OUTPUT_DISPLACEMENT, c4d.GV_PORT_INPUT)
+
+        if 'BaseColor' in textures:
+            texCol = textures['BaseColor'] #r"H:\01_Projects\Daniel_Projects\3DC-C4D_Workflow\Export_to_C4D\Can01_default_color.png"
+            texNodeCol=rs.CreateShader("TextureSampler", x=-100, y=200)
+            texNodeCol.SetName('Tex Diffuse')
+            texNodeCol[c4d.REDSHIFT_SHADER_TEXTURESAMPLER_TEX0, c4d.REDSHIFT_FILE_PATH]=texCol
+            rs.CreateConnection(texNodeCol, MatNode, 0, 0)
+
+        if 'Roughness' in textures:
+            texGloss = textures['Roughness'] #r"H:\01_Projects\Daniel_Projects\3DC-C4D_Workflow\Export_to_C4D\Can01_default_rough.png"        
+            TexNodeGloss=rs.CreateShader("TextureSampler", x=-500, y=300)
+            TexNodeGloss.SetName('Tex Roughness')
+            TexNodeGloss[c4d.REDSHIFT_SHADER_TEXTURESAMPLER_TEX0, c4d.REDSHIFT_FILE_PATH]=texGloss
+            TexNodeGloss[c4d.REDSHIFT_SHADER_TEXTURESAMPLER_TEX0_GAMMAOVERRIDE] = 1
+
+            invert=rs.CreateShader("RSMathInv", x=-300, y=300)
+            rs.CreateConnection(invert, MatNode, 0, 1)
+            invert.ExposeParameter(c4d.REDSHIFT_SHADER_RSMATHINV_INPUT, c4d.GV_PORT_INPUT)
+            rs.CreateConnection(TexNodeGloss, invert, 0, 0)
+
+        if 'Specular' in textures:
+            texMetal = textures['Specular'] #r"H:\01_Projects\Daniel_Projects\3DC-C4D_Workflow\Export_to_C4D\Can01_default_metalness.png"
+            TexNodeMetal=rs.CreateShader("TextureSampler", x=-100, y=400)
+            TexNodeMetal.SetName('Tex SpecColor')
+            TexNodeMetal[c4d.REDSHIFT_SHADER_TEXTURESAMPLER_TEX0, c4d.REDSHIFT_FILE_PATH]=texMetal
+            #TexNodeMetal[c4d.REDSHIFT_SHADER_TEXTURESAMPLER_TEX0_GAMMAOVERRIDE] = 1
+            rs.CreateConnection(TexNodeMetal, MatNode, 0, 2)
+
+        if 'Normal' in textures:
+            texNorm = textures['Normal'] #r"H:\01_Projects\Daniel_Projects\3DC-C4D_Workflow\Export_to_C4D\Can01_default_nmap.png"
+            BumpNode=rs.CreateShader("BumpMap", x=-50, y=500)
+            BumpNode[c4d.REDSHIFT_SHADER_BUMPMAP_INPUTTYPE] = 1
+            rs.CreateConnection(BumpNode, MatNode, 0, 3)
+            BumpNode.ExposeParameter(c4d.REDSHIFT_SHADER_BUMPMAP_INPUT, c4d.GV_PORT_INPUT)
+
+            TexNodeNorm=rs.CreateShader("TextureSampler", x=-200, y=500)
+            TexNodeNorm.SetName('NormalMap')
+            TexNodeNorm[c4d.REDSHIFT_SHADER_TEXTURESAMPLER_TEX0, c4d.REDSHIFT_FILE_PATH]=texNorm
+            TexNodeNorm[c4d.REDSHIFT_SHADER_TEXTURESAMPLER_TEX0_GAMMAOVERRIDE] = 1
+            rs.CreateConnection(TexNodeNorm, BumpNode, 0, 0)
+
+        if 'Displacement' in textures:
+            texDispl = textures['Displacement'] #r"H:\01_Projects\Daniel_Projects\3DC-C4D_Workflow\Export_to_C4D\Can01_default_disp.tif"
+            DisplNode=rs.CreateShader("Displacement", x=-50, y=600)
+            DisplNode.SetName('Displacement')
+            DisplNode.ExposeParameter(c4d.REDSHIFT_SHADER_DISPLACEMENT_TEXMAP, c4d.GV_PORT_INPUT)
+
+            TexNodeDispl=rs.CreateShader("TextureSampler", x=-250, y=600)
+            TexNodeDispl.SetName('Tex Displacement')
+            TexNodeDispl[c4d.REDSHIFT_SHADER_TEXTURESAMPLER_TEX0, c4d.REDSHIFT_FILE_PATH]=texDispl
+            rs.CreateConnection(TexNodeDispl, DisplNode, 0, 0)
+
+        if 'displ_value' in textures:
+            displValue = float(textures['displ_value'])
+            if displValue > 1:
+                pass
+                # we are not connecting displacement by default
+                # rs.CreateConnection(DisplNode, OutPutNode, 0, 1)
+            DisplNode[c4d.REDSHIFT_SHADER_DISPLACEMENT_SCALE] = displValue/2
+            DisplNode[c4d.REDSHIFT_SHADER_DISPLACEMENT_NEWRANGE_MIN] = -0.5
+            DisplNode[c4d.REDSHIFT_SHADER_DISPLACEMENT_NEWRANGE_MAX] = 0.5
+        else: 
+            displValue = 0
+
+        if 'EmissiveColor' in textures:
+            texEmit = textures['EmissiveColor'] #r"H:\01_Projects\Daniel_Projects\3DC-C4D_Workflow\Export_to_C4D\Can01_default_color.png"
+            texNodeEmit=rs.CreateShader("TextureSampler", x=-300, y=200)
+            texNodeEmit.SetName('Tex Emission')
+            texNodeEmit[c4d.REDSHIFT_SHADER_TEXTURESAMPLER_TEX0, c4d.REDSHIFT_FILE_PATH]=texEmit
+        return mat, displValue
+
     def readObj(self, objfile):
         dirname = os.path.dirname(objfile)
         with open(objfile,'r') as f:
