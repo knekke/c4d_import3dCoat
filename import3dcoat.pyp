@@ -102,7 +102,12 @@ class import3dCoat(c4d.plugins.CommandData):
             elif self.renderer == OCTANE_ID:
                 tag = op.MakeTag(1029603) #OctaneObject
                 self.doc.AddUndo(c4d.UNDOTYPE_NEW, tag)
-                mat, displValue = self.importMaterialOCT(matname, materials[matname], objname)
+                if 'Specular' in materials[matname]:
+                    print('Specular workflow')
+                    mat, displValue = self.importMaterialOCT_spec(matname, materials[matname], objname)
+                else:
+                    print('Metalness workflow')
+                    mat, displValue = self.importMaterialOCT_metal(matname, materials[matname], objname)
             else:
                 print("How did that happen???")
                 return True
@@ -124,7 +129,108 @@ class import3dCoat(c4d.plugins.CommandData):
         self.doc.AddUndo(c4d.UNDOTYPE_NEW,layer)
         return layer
 
-    def importMaterialOCT(self, matname, textures, objname):
+    def importMaterialOCT_spec(self, matname, textures, objname):
+        # Metalsness to specular
+        # https://marmoset.co/posts/pbr-texture-conversion/
+        mat = c4d.BaseMaterial(ID_OCTANE_DIFFUSE_MATERIAL)
+        mat.SetName(objname + '_' + matname)
+        mat[c4d.ID_LAYER_LINK] = self.layerSet(objname)
+        mat[c4d.OCT_MATERIAL_TYPE] = 2511
+        mat[c4d.OCT_MATERIAL_INDEX] = 1
+        self.doc.InsertMaterial(mat) 
+        self.doc.AddUndo(c4d.UNDOTYPE_NEW,mat)
+        TransN = c4d.BaseShader(ID_OCTANE_TRANSFORM)
+        mat.InsertShader(TransN)
+        ProjN = c4d.BaseShader(ID_OCTANE_PROJECTION)
+        mat.InsertShader(ProjN)
+
+        if 'BaseColor' in textures:
+            col = c4d.BaseShader(ID_OCTANE_IMAGE_TEXTURE)
+            mat.InsertShader(col)
+            col[c4d.IMAGETEXTURE_FILE] = textures['BaseColor']
+            col[c4d.IMAGETEXTURE_MODE] = 0
+            col[c4d.IMAGETEXTURE_GAMMA] = 2.2
+            col[c4d.IMAGETEX_BORDER_MODE] = 0
+            col[c4d.IMAGETEXTURE_TRANSFORM_LINK] = TransN
+            col[c4d.IMAGETEXTURE_PROJECTION_LINK] = ProjN
+            mat[c4d.OCT_MATERIAL_DIFFUSE_LINK] = col
+
+        if 'Specular' in textures:
+            spec = c4d.BaseShader(ID_OCTANE_IMAGE_TEXTURE)
+            mat.InsertShader(spec)
+            spec[c4d.IMAGETEXTURE_FILE] = textures['Specular']
+            spec[c4d.IMAGETEXTURE_MODE] = 0
+            spec[c4d.IMAGETEXTURE_GAMMA] = 2.2
+            spec[c4d.IMAGETEX_BORDER_MODE] = 0
+            spec[c4d.IMAGETEXTURE_TRANSFORM_LINK] = TransN
+            spec[c4d.IMAGETEXTURE_PROJECTION_LINK] = ProjN
+            mat[c4d.OCT_MATERIAL_SPECULAR_LINK] =spec
+            
+        if 'Roughness' in textures:
+            invert = c4d.BaseShader(ID_OCTANE_INVERT)
+            mat.InsertShader(invert)
+            roughtex = c4d.BaseShader(ID_OCTANE_IMAGE_TEXTURE)
+            mat.InsertShader(roughtex)
+            mat[c4d.OCT_MATERIAL_ROUGHNESS_LINK] = invert
+            roughtex[c4d.IMAGETEXTURE_FILE] = textures['Roughness']
+            roughtex[c4d.IMAGETEXTURE_MODE] = 1
+            roughtex[c4d.IMAGETEXTURE_GAMMA] = 2.2
+            roughtex[c4d.IMAGETEX_BORDER_MODE] = 0
+            roughtex[c4d.IMAGETEXTURE_TRANSFORM_LINK] = TransN
+            roughtex[c4d.IMAGETEXTURE_PROJECTION_LINK] = ProjN
+            invert[c4d.INVERT_TEXTURE] = roughtex
+
+        if 'Normal' in textures:
+            normtex = c4d.BaseShader(ID_OCTANE_IMAGE_TEXTURE)
+            mat.InsertShader(normtex)
+            mat[c4d.OCT_MATERIAL_NORMAL_LINK] = normtex
+            normtex[c4d.IMAGETEXTURE_FILE] = textures['Normal']
+            normtex[c4d.IMAGETEXTURE_MODE] = 0
+            normtex[c4d.IMAGETEXTURE_POWER_FLOAT] = 1
+            normtex[c4d.IMAGETEXTURE_GAMMA] = 1
+            normtex[c4d.IMAGETEX_BORDER_MODE] = 0
+            normtex[c4d.IMAGETEXTURE_TRANSFORM_LINK] = TransN
+            normtex[c4d.IMAGETEXTURE_PROJECTION_LINK] = ProjN
+        
+        if 'Displacement' in textures:
+            displBmp = c4d.bitmaps.BaseBitmap()
+            displBmp.InitWith(textures['Displacement'])
+            size = displBmp.GetBw()
+            if size < 512:
+                detail = 9
+            elif size < 1500:
+                detail = 10    
+            elif size < 3000:
+                detail = 11
+            elif size < 5500:
+                detail = 12
+            else:
+                detail = 13
+            disptex = c4d.BaseShader(ID_OCTANE_IMAGE_TEXTURE)
+            mat.InsertShader(disptex)
+            DISP = c4d.BaseShader(ID_OCTANE_DISPLACEMENT)
+            mat.InsertShader(DISP)
+            DISP[c4d.DISPLACEMENT_INPUT] = disptex
+            DISP[c4d.DISPLACEMENT_MID] = 0.5
+            DISP[c4d.DISPLACEMENT_LEVELOFDETAIL] = detail
+            disptex[c4d.IMAGETEXTURE_FILE] = textures['Displacement']
+            disptex[c4d.IMAGETEXTURE_MODE] = 1
+            disptex[c4d.IMAGETEXTURE_GAMMA] = 1
+            disptex[c4d.IMAGETEX_BORDER_MODE] = 0
+            disptex[c4d.IMAGETEXTURE_TRANSFORM_LINK] = TransN
+            disptex[c4d.IMAGETEXTURE_PROJECTION_LINK] = ProjN
+        if 'displ_value' in textures:
+            displValue = float(textures['displ_value'])
+            if displValue > 1:
+                pass
+                # we are not connecting displacement by default
+                # mat[c4d.OCT_MATERIAL_DISPLACEMENT_LINK] = DISP
+            DISP[c4d.DISPLACEMENT_AMOUNT] = displValue
+        else: 
+            displValue = 0
+        return mat, displValue
+
+    def importMaterialOCT_metal(self, matname, textures, objname):
         # Metalsness to specular
         # https://marmoset.co/posts/pbr-texture-conversion/
         mat = c4d.BaseMaterial(ID_OCTANE_DIFFUSE_MATERIAL)
@@ -387,6 +493,8 @@ class import3dCoat(c4d.plugins.CommandData):
                         materials[matname]['Metalness'] = dirname + '\\' + i
                     if (n+'_opacity').lower() in i.lower():
                         materials[matname]['Opacity'] = dirname + '\\' + i
+                    if (n+'_specular_color').lower() in i.lower():
+                        materials[matname]['Specular'] = dirname + '\\' + i
         return objs, materials
 
 if __name__ == '__main__':
