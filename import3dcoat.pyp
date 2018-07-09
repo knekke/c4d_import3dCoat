@@ -9,6 +9,7 @@
 
 
 import c4d
+from c4d import gui
 import os
 
 # RedshiftWrapper https://github.com/gr4ph0s/C4D_RedshiftWrapper_API
@@ -56,6 +57,7 @@ class import3dCoat(c4d.plugins.CommandData):
         self.renderer = rd[c4d.RDATA_RENDERENGINE]
         if self.renderer not in [REDSHIFT_ID, OCTANE_ID]:
             print "ABORT: Only Redshift and Octane supported at this point"
+            gui.MessageDialog("Please set Renderer to Redshift or Octane first",)
             return True
         doc.StartUndo()
         self.doc = doc
@@ -75,16 +77,21 @@ class import3dCoat(c4d.plugins.CommandData):
         c4d.EventAdd()
         return True
 
+
     def assignMaterials(self, objects, materials, objname):
         for obj in objects.keys():
             op = self.doc.SearchObject(obj)
+            # taglist = op.GetTags()
+            # for tag in taglist:
+            #     if tag.GetName() == 'Normal':
+            #         tag.Remove()
             matname = objects[obj]['matname']
             if self.renderer == REDSHIFT_ID:
                 tag = op.MakeTag(1036222) #RedshiftObject
                 self.doc.AddUndo(c4d.UNDOTYPE_NEW, tag)
                 tag[c4d.REDSHIFT_OBJECT_GEOMETRY_OVERRIDE] = 1
                 tag[c4d.REDSHIFT_OBJECT_GEOMETRY_DISPLACEMENTENABLED] = 1
-                tag[c4d.REDSHIFT_OBJECT_GEOMETRY_SUBDIVISIONENABLED] = 1
+                tag[c4d.REDSHIFT_OBJECT_GEOMETRY_SUBDIVISIONENABLED] = 0
                 tag[c4d.REDSHIFT_OBJECT_GEOMETRY_SMOOTHSUBDIVISIONENABLED] = 0
                 mat, displValue = self.importMaterialRS(matname, materials[matname], objname)
                 if displValue > 1:
@@ -93,6 +100,8 @@ class import3dCoat(c4d.plugins.CommandData):
                     tag[c4d.REDSHIFT_OBJECT_GEOMETRY_DISPLACEMENTENABLED] = 0
                     tag[c4d.REDSHIFT_OBJECT_GEOMETRY_OVERRIDE] = 0
             elif self.renderer == OCTANE_ID:
+                tag = op.MakeTag(1029603) #OctaneObject
+                self.doc.AddUndo(c4d.UNDOTYPE_NEW, tag)
                 mat, displValue = self.importMaterialOCT(matname, materials[matname], objname)
             else:
                 print("How did that happen???")
@@ -116,6 +125,8 @@ class import3dCoat(c4d.plugins.CommandData):
         return layer
 
     def importMaterialOCT(self, matname, textures, objname):
+        # Metalsness to specular
+        # https://marmoset.co/posts/pbr-texture-conversion/
         mat = c4d.BaseMaterial(ID_OCTANE_DIFFUSE_MATERIAL)
         mat.SetName(objname + '_' + matname)
         mat[c4d.ID_LAYER_LINK] = self.layerSet(objname)
@@ -149,7 +160,7 @@ class import3dCoat(c4d.plugins.CommandData):
             mat.InsertShader(metal)
             metal[c4d.IMAGETEXTURE_FILE] = textures['Metalness']
             metal[c4d.IMAGETEXTURE_MODE] = 1
-            metal[c4d.IMAGETEXTURE_GAMMA] = 1
+            metal[c4d.IMAGETEXTURE_GAMMA] = 2.2
             metal[c4d.IMAGETEX_BORDER_MODE] = 0
             metal[c4d.IMAGETEXTURE_TRANSFORM_LINK] = TransN
             metal[c4d.IMAGETEXTURE_PROJECTION_LINK] = ProjN
@@ -177,7 +188,7 @@ class import3dCoat(c4d.plugins.CommandData):
             mat[c4d.OCT_MATERIAL_ROUGHNESS_LINK] = roughtex
             roughtex[c4d.IMAGETEXTURE_FILE] = textures['Roughness']
             roughtex[c4d.IMAGETEXTURE_MODE] = 1
-            roughtex[c4d.IMAGETEXTURE_GAMMA] = 1
+            roughtex[c4d.IMAGETEXTURE_GAMMA] = 2.2
             roughtex[c4d.IMAGETEX_BORDER_MODE] = 0
             roughtex[c4d.IMAGETEXTURE_TRANSFORM_LINK] = TransN
             roughtex[c4d.IMAGETEXTURE_PROJECTION_LINK] = ProjN
@@ -188,7 +199,7 @@ class import3dCoat(c4d.plugins.CommandData):
             mat[c4d.OCT_MATERIAL_NORMAL_LINK] = normtex
             normtex[c4d.IMAGETEXTURE_FILE] = textures['Normal']
             normtex[c4d.IMAGETEXTURE_MODE] = 0
-            normtex[c4d.IMAGETEXTURE_POWER_FLOAT] = 0.5
+            normtex[c4d.IMAGETEXTURE_POWER_FLOAT] = 1
             normtex[c4d.IMAGETEXTURE_GAMMA] = 1
             normtex[c4d.IMAGETEX_BORDER_MODE] = 0
             normtex[c4d.IMAGETEXTURE_TRANSFORM_LINK] = TransN
@@ -224,8 +235,10 @@ class import3dCoat(c4d.plugins.CommandData):
         if 'displ_value' in textures:
             displValue = float(textures['displ_value'])
             if displValue > 1:
-                mat[c4d.OCT_MATERIAL_DISPLACEMENT_LINK] = DISP
-            DISP[c4d.DISPLACEMENT_AMOUNT] = displValue/100.0
+                pass
+                # we are not connecting displacement by default
+                # mat[c4d.OCT_MATERIAL_DISPLACEMENT_LINK] = DISP
+            DISP[c4d.DISPLACEMENT_AMOUNT] = displValue
         else: 
             displValue = 0
         return mat, displValue
@@ -278,10 +291,16 @@ class import3dCoat(c4d.plugins.CommandData):
 
         if 'Normal' in textures:
             texNorm = textures['Normal'] #r"H:\01_Projects\Daniel_Projects\3DC-C4D_Workflow\Export_to_C4D\Can01_default_nmap.png"
-            TexNodeNorm=rs.CreateShader("NormalMap", x=-100, y=500)
+            BumpNode=rs.CreateShader("BumpMap", x=-50, y=500)
+            BumpNode[c4d.REDSHIFT_SHADER_BUMPMAP_INPUTTYPE] = 1
+            rs.CreateConnection(BumpNode, MatNode, 0, 3)
+            BumpNode.ExposeParameter(c4d.REDSHIFT_SHADER_BUMPMAP_INPUT, c4d.GV_PORT_INPUT)
+
+            TexNodeNorm=rs.CreateShader("TextureSampler", x=-200, y=500)
             TexNodeNorm.SetName('NormalMap')
-            TexNodeNorm[c4d.REDSHIFT_SHADER_NORMALMAP_TEX0, c4d.REDSHIFT_FILE_PATH]=texNorm
-            rs.CreateConnection(TexNodeNorm, MatNode, 0, 3)
+            TexNodeNorm[c4d.REDSHIFT_SHADER_TEXTURESAMPLER_TEX0, c4d.REDSHIFT_FILE_PATH]=texNorm
+            TexNodeNorm[c4d.REDSHIFT_SHADER_TEXTURESAMPLER_TEX0_GAMMAOVERRIDE] = 1
+            rs.CreateConnection(TexNodeNorm, BumpNode, 0, 0)
 
         if 'Displacement' in textures:
             texDispl = textures['Displacement'] #r"H:\01_Projects\Daniel_Projects\3DC-C4D_Workflow\Export_to_C4D\Can01_default_disp.tif"
@@ -297,7 +316,9 @@ class import3dCoat(c4d.plugins.CommandData):
         if 'displ_value' in textures:
             displValue = float(textures['displ_value'])
             if displValue > 1:
-                rs.CreateConnection(DisplNode, OutPutNode, 0, 1)
+                pass
+                # we are not connecting displacement by default
+                # rs.CreateConnection(DisplNode, OutPutNode, 0, 1)
             DisplNode[c4d.REDSHIFT_SHADER_DISPLACEMENT_SCALE] = displValue/2
             DisplNode[c4d.REDSHIFT_SHADER_DISPLACEMENT_NEWRANGE_MIN] = -0.5
             DisplNode[c4d.REDSHIFT_SHADER_DISPLACEMENT_NEWRANGE_MAX] = 0.5
@@ -358,13 +379,13 @@ class import3dCoat(c4d.plugins.CommandData):
         for matname in materials.keys():
             for i in os.listdir(dirname):
                 for n in [matname, os.path.basename(objfile).split('.')[0]]:
-                    if n+'_ao' in i.lower():
+                    if (n+'_ao').lower() in i.lower():
                         materials[matname]['ao'] = dirname + '\\' + i
-                    if n+'_emissivecolor' in i.lower():
+                    if (n+'_emissivecolor').lower() in i.lower():
                         materials[matname]['EmissiveColor'] = dirname + '\\' + i
-                    if n+'_metalness' in i.lower():
+                    if (n+'_metalness').lower() in i.lower():
                         materials[matname]['Metalness'] = dirname + '\\' + i
-                    if n+'_opacity' in i.lower():
+                    if (n+'_opacity').lower() in i.lower():
                         materials[matname]['Opacity'] = dirname + '\\' + i
         return objs, materials
 
