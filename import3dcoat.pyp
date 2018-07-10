@@ -79,6 +79,7 @@ class import3dCoat(c4d.plugins.CommandData):
 
 
     def assignMaterials(self, objects, materials, objname):
+        mats = {}
         for obj in objects.keys():
             op = self.doc.SearchObject(obj)
             # taglist = op.GetTags()
@@ -86,6 +87,10 @@ class import3dCoat(c4d.plugins.CommandData):
             #     if tag.GetName() == 'Normal':
             #         tag.Remove()
             matname = objects[obj]['matname']
+            if matname in mats.keys():
+                matexists = True
+            else:
+                matexists = False
             if self.renderer == REDSHIFT_ID:
                 tag = op.MakeTag(1036222) #RedshiftObject
                 self.doc.AddUndo(c4d.UNDOTYPE_NEW, tag)
@@ -93,12 +98,19 @@ class import3dCoat(c4d.plugins.CommandData):
                 tag[c4d.REDSHIFT_OBJECT_GEOMETRY_DISPLACEMENTENABLED] = 1
                 tag[c4d.REDSHIFT_OBJECT_GEOMETRY_SUBDIVISIONENABLED] = 0
                 tag[c4d.REDSHIFT_OBJECT_GEOMETRY_SMOOTHSUBDIVISIONENABLED] = 0
-                if 'Specular' in materials[matname]:
-                    print('Specular workflow')
-                    mat, displValue = self.importMaterialRS_spec(matname, materials[matname], objname)
+                if not matexists:
+                    if 'Specular' in materials[matname]:
+                        print('Specular workflow')
+                        mat, displValue = self.importMaterialRS_spec(matname, materials[matname], objname)
+                    else:
+                        print('Metalness workflow')
+                        mat, displValue = self.importMaterialRS_metal(matname, materials[matname], objname)
+                    mats[matname] = {}
+                    mats[matname]['material'] = mat
+                    mats[matname]['displValue'] = displValue
                 else:
-                    print('Metalness workflow')
-                    mat, displValue = self.importMaterialRS_metal(matname, materials[matname], objname)
+                    mat = mats[matname]['material']
+                    displValue = mats[matname]['displValue']
                 if displValue > 1:
                     tag[c4d.REDSHIFT_OBJECT_GEOMETRY_MAXDISPLACEMENT] = displValue
                 else:
@@ -107,12 +119,19 @@ class import3dCoat(c4d.plugins.CommandData):
             elif self.renderer == OCTANE_ID:
                 tag = op.MakeTag(1029603) #OctaneObject
                 self.doc.AddUndo(c4d.UNDOTYPE_NEW, tag)
-                if 'Specular' in materials[matname]:
-                    print('Specular workflow')
-                    mat, displValue = self.importMaterialOCT_spec(matname, materials[matname], objname)
+                if not matexists:
+                    if 'Specular' in materials[matname]:
+                        print('Specular workflow')
+                        mat, displValue = self.importMaterialOCT_spec(matname, materials[matname], objname)
+                    else:
+                        print('Metalness workflow')
+                        mat, displValue = self.importMaterialOCT_metal(matname, materials[matname], objname)
+                    mats[matname] = {}
+                    mats[matname]['material'] = mat
+                    mats[matname]['displValue'] = displValue
                 else:
-                    print('Metalness workflow')
-                    mat, displValue = self.importMaterialOCT_metal(matname, materials[matname], objname)
+                    mat = mats[matname]['material']
+                    displValue = mats[matname]['displValue']
             else:
                 print("How did that happen???")
                 return True
