@@ -600,7 +600,12 @@ class import3dCoat(c4d.plugins.CommandData):
                 elif prefix == 'map_bump':
                     materials[matname]['Normal'] = dirname + '\\' + data
         for matname in materials.keys():
-            n = os.path.basename(materials[matname]['BaseColor']).split('_color')[0]
+            if 'BaseColor' in materials[matname]['BaseColor']:
+                n = os.path.basename(materials[matname]['BaseColor']).split('_BaseColor')[0]
+            elif '_color' in materials[matname]['BaseColor']::
+                n = os.path.basename(materials[matname]['BaseColor']).split('_color')[0]
+            elif '_diffuse' in materials[matname]['BaseColor']::
+                n = os.path.basename(materials[matname]['BaseColor']).split('_diffuse')[0]
             for i in os.listdir(dirname):
                 if (n+'_ao').lower() in i.lower():
                     materials[matname]['ao'] = dirname + '\\' + i
@@ -611,6 +616,8 @@ class import3dCoat(c4d.plugins.CommandData):
                 if (n+'_opacity').lower() in i.lower():
                     materials[matname]['Opacity'] = dirname + '\\' + i
                 if (n+'_specular_color').lower() in i.lower():
+                    materials[matname]['Specular'] = dirname + '\\' + i
+                elif (n+'_specular').lower() in i.lower():
                     materials[matname]['Specular'] = dirname + '\\' + i
         return objs, materials
 
