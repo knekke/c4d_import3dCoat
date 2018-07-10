@@ -582,7 +582,7 @@ class import3dCoat(c4d.plugins.CommandData):
                     materials[matname]['Normal'] = dirname + '\\' + data
         for matname in materials.keys():
             for i in os.listdir(dirname):
-                for n in [matname, os.path.basename(objfile).split('.')[0]]:
+                for n in [matname]: #, os.path.basename(objfile).split('.')[0]]:
                     if (n+'_ao').lower() in i.lower():
                         materials[matname]['ao'] = dirname + '\\' + i
                     if (n+'_emissivecolor').lower() in i.lower():
