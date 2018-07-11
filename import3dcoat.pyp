@@ -602,9 +602,9 @@ class import3dCoat(c4d.plugins.CommandData):
         for matname in materials.keys():
             if 'BaseColor' in materials[matname]['BaseColor']:
                 n = os.path.basename(materials[matname]['BaseColor']).split('_BaseColor')[0]
-            elif '_color' in materials[matname]['BaseColor']::
+            elif '_color' in materials[matname]['BaseColor']:
                 n = os.path.basename(materials[matname]['BaseColor']).split('_color')[0]
-            elif '_diffuse' in materials[matname]['BaseColor']::
+            elif '_diffuse' in materials[matname]['BaseColor']:
                 n = os.path.basename(materials[matname]['BaseColor']).split('_diffuse')[0]
             for i in os.listdir(dirname):
                 if (n+'_ao').lower() in i.lower():
