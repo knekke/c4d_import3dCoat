@@ -18,3 +18,6 @@ Modify the importObj settings to not import materials!
 ## Notes:
 * Diplacement nodes get created but are not plugged in by default
 * the existence of specular_color decides if metalness or specular import options will be used
+
+## Example Video:
+[3DC_C4D_PBR on Vimeo](https://vimeo.com/280255790)
