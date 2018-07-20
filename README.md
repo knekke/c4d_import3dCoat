@@ -12,7 +12,7 @@ Modify the importObj settings to not import materials!
 * Export .obj from 3dCoat (uncheck "export constructor") into a separate folder
 * In Cinema4D make sure your obj import settings don't import material
 * Set your Renderer to either Redshift or Octane
-* Run the Importer (plugins->import3DCoat) and select the export folder
+* Run the Importer (plugins->import3DCoat) and select the .obj you want to import
 * wait for the import to finish...
 
 ## Notes:

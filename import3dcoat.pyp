@@ -61,13 +61,12 @@ class import3dCoat(c4d.plugins.CommandData):
             return True
         doc.StartUndo()
         self.doc = doc
-        location = c4d.storage.LoadDialog(0,"Select 3DCoat export Folder", flags=c4d.FILESELECT_DIRECTORY, def_path=doc.GetDocumentPath())
+        objfile = c4d.storage.LoadDialog(0,"Select 3DCoat export Folder", flags=c4d.FILESELECT_LOAD, def_path=doc.GetDocumentPath())
         objfiles = {}
-        for file in os.listdir(location):
-            ext = file.split('.')[-1]            
-            if ext == 'obj':
-                name = file.split('.')[0]
-                objfiles[name] = os.path.join(location, file)
+        ext = objfile.split('.')[-1]            
+        if ext == 'obj':
+            name = os.path.basename(objfile).split('.')[0]
+            objfiles[name] = objfile
         for objname in objfiles.keys():
             obj = objfiles[objname]
             c4d.documents.MergeDocument(doc, obj, c4d.SCENEFILTER_OBJECTS, None)
