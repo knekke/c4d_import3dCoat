@@ -536,7 +536,7 @@ class import3dCoat(c4d.plugins.CommandData):
             rs.CreateConnection(TexNodeDispl, DisplNode, 0, 0)
 
         if 'displ_value' in textures:
-            displValue = float(textures['displ_value'])
+            displValue = float(textures['displ_value'].replace(',','.'))
             if displValue > 1:
                 pass
                 # we are not connecting displacement by default
